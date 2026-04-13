@@ -1,0 +1,566 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>mouthfeel</title>
+<style>
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+body {
+  background: #fff;
+  color: #000;
+  font-family: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  overflow: hidden;
+  height: 100vh;
+  width: 100vw;
+  cursor: grab;
+}
+body.dragging { cursor: grabbing; }
+
+canvas { position: fixed; inset: 0; display: block; }
+
+/* ── header ── */
+#hdr {
+  position: fixed;
+  top: 18px; left: 20px;
+  z-index: 30;
+  pointer-events: none;
+  user-select: none;
+}
+#hdr h1 {
+  font-size: 11px;
+  font-weight: 300;
+  letter-spacing: 0.35em;
+  color: #000;
+}
+#hdr p {
+  font-size: 8px;
+  color: #aaa;
+  margin-top: 3px;
+}
+
+/* ── flavor legend top-left ── */
+#legend {
+  position: fixed;
+  top: 60px; left: 20px;
+  z-index: 30;
+  pointer-events: none;
+  font-size: 9px;
+  color: #888;
+}
+.leg-item { display: flex; align-items: center; gap: 5px; margin-bottom: 3px; }
+.leg-dot  { width: 5px; height: 5px; border-radius: 50%; flex-shrink: 0; }
+
+/* ── drink list top-right ── */
+#list {
+  position: fixed;
+  top: 18px; right: 20px;
+  z-index: 30;
+  width: 200px;
+  max-height: calc(100vh - 110px);
+  overflow-y: auto;
+  font-size: 9px;
+}
+.drow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 0;
+  border-bottom: 1px solid #eee;
+  color: #888;
+  transition: color 0.15s;
+}
+.drow:hover { color: #000; }
+.ddot { width: 4px; height: 4px; border-radius: 50%; flex-shrink: 0; }
+.dname { flex: 1; }
+.dstats { color: #bbb; font-size: 8px; }
+.drm {
+  background: none; border: none;
+  color: #ccc; cursor: pointer;
+  font-family: inherit; font-size: 10px;
+  padding: 0 2px;
+  transition: color 0.1s;
+}
+.drm:hover { color: #f00; }
+
+/* ── axis labels ── */
+.alabel {
+  position: fixed;
+  z-index: 30;
+  pointer-events: none;
+  font-size: 9px;
+  color: #bbb;
+  white-space: nowrap;
+}
+
+/* ── tooltip ── */
+#tip {
+  position: fixed;
+  z-index: 40;
+  pointer-events: none;
+  font-size: 8px;
+  letter-spacing: 0.08em;
+  color: #000;
+  background: #fff;
+  padding: 5px 8px;
+  border: 1px solid #ddd;
+  display: none;
+  white-space: nowrap;
+}
+
+/* ── bottom control panel ── */
+#panel {
+  position: fixed;
+  bottom: 0; left: 0; right: 0;
+  z-index: 30;
+  background: rgba(255,255,255,0.95);
+  border-top: 1px solid #e8e8e8;
+  padding: 10px 20px 14px;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 18px;
+  align-items: flex-end;
+  backdrop-filter: blur(6px);
+}
+
+.fld { display: flex; flex-direction: column; gap: 4px; }
+
+.fld label {
+  font-size: 9px;
+  color: #aaa;
+}
+
+.fld input[type="text"] {
+  background: transparent;
+  border: none;
+  border-bottom: 1px solid #ccc;
+  color: #000;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 0;
+  width: 110px;
+  outline: none;
+  transition: border-color 0.15s, color 0.15s;
+}
+.fld input[type="text"]:focus { border-bottom-color: #555; color: #000; }
+.fld input[type="text"]::placeholder { color: #ddd; }
+
+.fld select {
+  background: #fff;
+  border: none;
+  border-bottom: 1px solid #1e1e1e;
+  color: #666;
+  font-family: inherit;
+  font-size: 11px;
+  padding: 2px 0;
+  width: 110px;
+  outline: none;
+  -webkit-appearance: none;
+  appearance: none;
+  cursor: pointer;
+  }
+.fld select:focus { border-bottom-color: #000; }
+
+.fld input[type="range"] {
+  width: 70px;
+  accent-color: #000;
+  cursor: pointer;
+}
+
+#addBtn {
+  background: #000;
+  border: none;
+  color: #fff;
+  font-family: inherit;
+  font-size: 12px;
+  padding: 6px 16px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+#addBtn:hover { background: red; }
+
+.vval { color: #999; }
+</style>
+</head>
+<body>
+
+<canvas id="c"></canvas>
+
+<div id="hdr">
+  <h1>mouthfeel</h1>
+  <p>x: 味の強さ　·　y: 香の強さ　·　z: 感の強さ　·　色: 味　·　形: 感</p>
+</div>
+
+<div id="legend"></div>
+<div id="list"></div>
+<div id="tip"></div>
+<div class="alabel" id="ax">味の強さ</div>
+<div class="alabel" id="ay">香の強さ</div>
+<div class="alabel" id="az">感の強さ</div>
+
+<div id="panel">
+  <div class="fld">
+    <label>名</label>
+    <input type="text" id="drinkName" placeholder="—" autocomplete="off" />
+  </div>
+  <div class="fld">
+    <label>味</label>
+    <select id="flavorType">
+      <option value="苦い">苦い</option>
+      <option value="甘い">甘い</option>
+      <option value="すっぱい">すっぱい</option>
+      <option value="しょっぱい">しょっぱい</option>
+      <option value="うまみ">うまみ</option>
+      <option value="辛い（痛い）">辛い（痛い）</option>
+      <option value="辛い（うまい）">辛い（うまい）</option>
+      <option value="無味">無味</option>
+      <option value="コク">コク</option>
+      <option value="こってり">こってり</option>
+    </select>
+  </div>
+  <div class="fld">
+    <label>感</label>
+    <select id="textureType">
+      <option value="ふわふわ">ふわふわ</option>
+      <option value="サクサク">サクサク</option>
+      <option value="カリカリ">カリカリ</option>
+      <option value="シャキシャキ">シャキシャキ</option>
+      <option value="ホクホク">ホクホク</option>
+      <option value="もちもち">もちもち</option>
+      <option value="プルプル">プルプル</option>
+      <option value="しゅわしゅわ">しゅわしゅわ</option>
+      <option value="さらさら">さらさら</option>
+      <option value="どろどろ">どろどろ</option>
+      <option value="ねばねば">ねばねば</option>
+      <option value="つるつる">つるつる</option>
+    </select>
+  </div>
+  <div class="fld">
+    <label>味の強さ &nbsp;<span class="vval" id="fv">5</span></label>
+    <input type="range" id="flavorInt" min="1" max="10" step="1" value="5"
+           oninput="document.getElementById('fv').textContent=this.value" />
+  </div>
+  <div class="fld">
+    <label>香の強さ &nbsp;<span class="vval" id="av">5</span></label>
+    <input type="range" id="aromaInt" min="1" max="10" step="1" value="5"
+           oninput="document.getElementById('av').textContent=this.value" />
+  </div>
+  <div class="fld">
+    <label>感の強さ &nbsp;<span class="vval" id="tv">5</span></label>
+    <input type="range" id="textureInt" min="1" max="10" step="1" value="5"
+           oninput="document.getElementById('tv').textContent=this.value" />
+  </div>
+  <div class="fld" style="justify-content:flex-end">
+    <label>&nbsp;</label>
+    <button id="addBtn" onclick="addDrink()">参加</button>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script>
+// ── COLORS ───────────────────────────────────────────────────────────────────
+
+const COLORS = {
+  '苦い':          '#245101',
+  '甘い':          '#fc8fd4',
+  'すっぱい':      '#16e5fc',
+  'しょっぱい':    '#9a9a6a',
+  'うまみ':        '#8b5e3c',
+  '辛い（痛い）':  '#fc3b2d',
+  '辛い（うまい）':'#b71010',
+  '無味':          '#aaaaaa',
+  'コク':          '#7b5fa0',
+  'こってり':      '#c47a2b',
+};
+
+function hexInt(h) { return parseInt((h || '#555555').replace('#',''), 16); }
+
+// ── DATA ─────────────────────────────────────────────────────────────────────
+
+let drinks = [
+  { name: '水', type: '無味', texture: 'さらさら', f: 1, a: 1, ti: 1 },
+];
+
+// ── THREE SETUP ───────────────────────────────────────────────────────────────
+
+const canvas = document.getElementById('c');
+const renderer = new THREE.WebGLRenderer({ canvas, antialias: true });
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.setClearColor(0xffffff, 1);
+
+const scene = new THREE.Scene();
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 500);
+const TARGET = new THREE.Vector3(5.5, 5.5, 5.5);
+const sph = { theta: 0.75, phi: 1.05, r: 28 };
+
+function camUpdate() {
+  camera.position.set(
+    TARGET.x + sph.r * Math.sin(sph.phi) * Math.sin(sph.theta),
+    TARGET.y + sph.r * Math.cos(sph.phi),
+    TARGET.z + sph.r * Math.sin(sph.phi) * Math.cos(sph.theta)
+  );
+  camera.lookAt(TARGET);
+}
+
+function onResize() {
+  const w = window.innerWidth, h = window.innerHeight;
+  renderer.setSize(w, h);
+  camera.aspect = w / h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', onResize);
+onResize();
+camUpdate();
+
+// ── ORBIT ─────────────────────────────────────────────────────────────────────
+
+let drag = false, lm = { x: 0, y: 0 };
+
+canvas.addEventListener('mousedown', e => {
+  drag = true; lm = { x: e.clientX, y: e.clientY };
+  document.body.classList.add('dragging');
+});
+window.addEventListener('mouseup', () => {
+  drag = false;
+  document.body.classList.remove('dragging');
+});
+window.addEventListener('mousemove', e => {
+  if (!drag) return;
+  sph.theta -= (e.clientX - lm.x) * 0.005;
+  sph.phi = Math.max(0.08, Math.min(Math.PI - 0.08, sph.phi + (e.clientY - lm.y) * 0.005));
+  lm = { x: e.clientX, y: e.clientY };
+  camUpdate();
+});
+canvas.addEventListener('wheel', e => {
+  sph.r = Math.max(6, Math.min(70, sph.r + e.deltaY * 0.035));
+  camUpdate();
+  e.preventDefault();
+}, { passive: false });
+
+let lt = null;
+canvas.addEventListener('touchstart', e => { lt = { x: e.touches[0].clientX, y: e.touches[0].clientY }; });
+canvas.addEventListener('touchmove', e => {
+  if (!lt) return;
+  sph.theta -= (e.touches[0].clientX - lt.x) * 0.005;
+  sph.phi = Math.max(0.08, Math.min(Math.PI - 0.08, sph.phi + (e.touches[0].clientY - lt.y) * 0.005));
+  lt = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+  camUpdate();
+  e.preventDefault();
+}, { passive: false });
+
+// ── AXES + GRID ───────────────────────────────────────────────────────────────
+
+(function buildGrid() {
+  const faint = new THREE.LineBasicMaterial({ color: 0xdddddd });
+  const axis  = new THREE.LineBasicMaterial({ color: 0xcccccc });
+
+  // floor grid y=0
+  for (let i = 0; i <= 10; i++) {
+    const pts1 = [new THREE.Vector3(i,0,0), new THREE.Vector3(i,0,10)];
+    const pts2 = [new THREE.Vector3(0,0,i), new THREE.Vector3(10,0,i)];
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts1), faint));
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts2), faint));
+  }
+  // 3 axes
+  [[11,0,0],[0,11,0],[0,0,11]].forEach(([x,y,z]) => {
+    const pts = [new THREE.Vector3(0,0,0), new THREE.Vector3(x,y,z)];
+    scene.add(new THREE.Line(new THREE.BufferGeometry().setFromPoints(pts), axis));
+  });
+})();
+
+// ── SHAPE GEOMETRIES ─────────────────────────────────────────────────────────
+
+function spikyGeo(r) {
+  const g = new THREE.IcosahedronGeometry(r, 1);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    if (i % 3 === 0) {
+      p.setXYZ(i, p.getX(i) * 1.8, p.getY(i) * 1.8, p.getZ(i) * 1.8);
+    }
+  }
+  p.needsUpdate = true;
+  return g;
+}
+
+function createMesh(drink) {
+  const group = new THREE.Group();
+  const r = 0.12 + drink.ti * 0.16;
+  const col = hexInt(COLORS[drink.type]);
+  const lmat = new THREE.LineBasicMaterial({ color: col });
+  const fmat = new THREE.MeshBasicMaterial({ color: col, transparent: true, opacity: 0.05, side: THREE.DoubleSide });
+
+  function addGeo(geo, sx, sy, sz) {
+    const e = new THREE.EdgesGeometry(geo);
+    const w = new THREE.LineSegments(e, lmat);
+    const m = new THREE.Mesh(geo, fmat);
+    if (sx !== undefined) { w.scale.set(sx,sy,sz); m.scale.set(sx,sy,sz); }
+    group.add(w, m);
+  }
+
+  switch (drink.texture) {
+    case 'ふわふわ':    addGeo(new THREE.SphereGeometry(r, 6, 4)); break;
+    case 'サクサク':    addGeo(new THREE.TetrahedronGeometry(r*1.3)); break;
+    case 'カリカリ':    addGeo(new THREE.BoxGeometry(r*1.6,r*1.6,r*1.6)); break;
+    case 'シャキシャキ': addGeo(new THREE.OctahedronGeometry(r*1.15)); break;
+    case 'ホクホク':    addGeo(new THREE.DodecahedronGeometry(r)); break;
+    case 'もちもち':    addGeo(new THREE.TorusGeometry(r*0.6, r*0.28, 4, 7)); break;
+    case 'プルプル':    addGeo(new THREE.IcosahedronGeometry(r)); break;
+    case 'しゅわしゅわ': addGeo(spikyGeo(r)); break;
+    case 'さらさら':    addGeo(new THREE.SphereGeometry(r, 14, 10)); break;
+    case 'どろどろ':    addGeo(new THREE.TorusKnotGeometry(r*0.42,r*0.14,52,4)); break;
+    case 'ねばねば': {
+      [
+        new THREE.BoxGeometry(r*2.4,r*0.3,r*0.3),
+        new THREE.BoxGeometry(r*0.3,r*2.4,r*0.3),
+        new THREE.BoxGeometry(r*0.3,r*0.3,r*2.4),
+      ].forEach(g => {
+        group.add(new THREE.LineSegments(new THREE.EdgesGeometry(g), lmat));
+        group.add(new THREE.Mesh(g, fmat));
+      });
+      break;
+    }
+    case 'つるつる': {
+      const s = new THREE.SphereGeometry(r*0.5, 10, 7);
+      const w = new THREE.LineSegments(new THREE.EdgesGeometry(s), lmat);
+      const m = new THREE.Mesh(s, fmat);
+      w.scale.y = 2.6; m.scale.y = 2.6;
+      group.add(w, m);
+      break;
+    }
+    default: addGeo(new THREE.SphereGeometry(r, 6, 4));
+  }
+
+  group.position.set(drink.f, drink.a, drink.ti);
+
+  // deterministic slow spin based on drink values
+  const seed = drink.f * 17 + drink.a * 31 + drink.ti * 7;
+  group.userData.rs = {
+    x: ((seed % 10) - 5) * 0.00045,
+    y: (((seed * 3) % 10) - 5) * 0.00065,
+    z: (((seed * 7) % 10) - 5) * 0.00035,
+  };
+  group.userData.name = drink.name;
+  group.userData.info = `${drink.type} · ${drink.texture} · 味:${drink.f} 香:${drink.a} 感:${drink.ti}`;
+
+  return group;
+}
+
+// ── SCENE REBUILD ─────────────────────────────────────────────────────────────
+
+let meshes = [];
+
+function rebuild() {
+  meshes.forEach(m => scene.remove(m));
+  meshes = drinks.map(d => { const m = createMesh(d); scene.add(m); return m; });
+  renderLegend();
+  renderList();
+}
+
+// ── RAYCASTING TOOLTIP ────────────────────────────────────────────────────────
+
+const raycaster = new THREE.Raycaster();
+raycaster.params.Line = { threshold: 0.15 };
+const mouse2d = new THREE.Vector2();
+const tip = document.getElementById('tip');
+
+canvas.addEventListener('mousemove', e => {
+  if (drag) { tip.style.display = 'none'; return; }
+  mouse2d.x =  (e.clientX / window.innerWidth)  * 2 - 1;
+  mouse2d.y = -(e.clientY / window.innerHeight) * 2 + 1;
+  raycaster.setFromCamera(mouse2d, camera);
+
+  // collect all line segments from meshes
+  const targets = [];
+  meshes.forEach(g => g.children.forEach(c => { if (c.isLineSegments || c.isLine) targets.push(c); }));
+  const hits = raycaster.intersectObjects(targets);
+
+  if (hits.length) {
+    const parent = hits[0].object.parent;
+    tip.textContent = `${parent.userData.name}　·　${parent.userData.info}`;
+    tip.style.display = 'block';
+    tip.style.left = (e.clientX + 14) + 'px';
+    tip.style.top  = (e.clientY - 10) + 'px';
+  } else {
+    tip.style.display = 'none';
+  }
+});
+canvas.addEventListener('mouseleave', () => { tip.style.display = 'none'; });
+
+// ── UI ────────────────────────────────────────────────────────────────────────
+
+function renderLegend() {
+  const present = [...new Set(drinks.map(d => d.type))];
+  document.getElementById('legend').innerHTML = present.map(t =>
+    `<div class="leg-item">
+      <div class="leg-dot" style="background:${COLORS[t]||'#555'}"></div>
+      <span>${t}</span>
+    </div>`
+  ).join('');
+}
+
+function renderList() {
+  document.getElementById('list').innerHTML = drinks.map((d, i) =>
+    `<div class="drow">
+      <div class="ddot" style="background:${COLORS[d.type]||'#555'}"></div>
+      <span class="dname">${d.name}</span>
+      <span class="dstats">${d.texture}</span>
+      <button class="drm" onclick="removeDrink(${i})">×</button>
+    </div>`
+  ).join('');
+}
+
+function addDrink() {
+  const name = document.getElementById('drinkName').value.trim();
+  if (!name) { document.getElementById('drinkName').focus(); return; }
+  drinks.push({
+    name,
+    type:    document.getElementById('flavorType').value,
+    texture: document.getElementById('textureType').value,
+    f:       parseInt(document.getElementById('flavorInt').value),
+    a:       parseInt(document.getElementById('aromaInt').value),
+    ti:      parseInt(document.getElementById('textureInt').value),
+  });
+  document.getElementById('drinkName').value = '';
+  rebuild();
+}
+
+function removeDrink(i) { drinks.splice(i, 1); rebuild(); }
+
+document.getElementById('drinkName').addEventListener('keydown', e => {
+  if (e.key === 'Enter') addDrink();
+});
+
+// ── RENDER LOOP ───────────────────────────────────────────────────────────────
+
+function animate() {
+  requestAnimationFrame(animate);
+  meshes.forEach(m => {
+    m.rotation.x += m.userData.rs.x;
+    m.rotation.y += m.userData.rs.y;
+    m.rotation.z += m.userData.rs.z;
+  });
+  // project axis tip points to screen and move labels
+  const axPoints = [
+    { id: 'ax', v: new THREE.Vector3(11.5, 0, 0) },
+    { id: 'ay', v: new THREE.Vector3(0, 11.5, 0) },
+    { id: 'az', v: new THREE.Vector3(0, 0, 11.5) },
+  ];
+  axPoints.forEach(({ id, v }) => {
+    const p = v.clone().project(camera);
+    const x = ( p.x * 0.5 + 0.5) * window.innerWidth;
+    const y = (-p.y * 0.5 + 0.5) * window.innerHeight;
+    const el = document.getElementById(id);
+    el.style.left = x + 'px';
+    el.style.top  = y + 'px';
+    el.style.display = p.z < 1 ? 'block' : 'none';
+  });
+  renderer.render(scene, camera);
+}
+
+rebuild();
+animate();
+</script>
+</body>
+</html>
